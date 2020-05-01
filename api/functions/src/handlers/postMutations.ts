@@ -23,7 +23,7 @@ export default async (req: Request, res: Response) => {
       } else {
         console.log("conversation doesn't exist!", val);
       }
-      ref.push(payload);
+      ref.child('mutations').push(payload);
     }, (errorObject: { code: string; }) => {
       msg = errorObject.code;
     });
