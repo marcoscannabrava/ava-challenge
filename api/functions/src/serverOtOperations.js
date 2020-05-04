@@ -41,6 +41,21 @@ ot.Server = (function (global) {
 
 }(this));
 
+// ------ Function to Transform Operations from JSON to Operation Objects ------ 
+const SimpleTextOperation = require('../simpleTextOT');
+const Insert = SimpleTextOperation.Insert;
+const Delete = SimpleTextOperation.Delete;
+
+hydrateOperations = (operations) => {
+  let result = operations
+  result.map((op) => {
+    if (op.type === "insert") return new Insert(op.text, op.index);
+    if (op.type === "delete") return new Delete(op.length, op.index);
+  })
+  return result;
+}
+
 if (typeof module === 'object') {
   module.exports = ot.Server;
+  module.exports = hydrateOperations;
 }

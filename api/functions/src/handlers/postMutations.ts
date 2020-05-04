@@ -1,15 +1,14 @@
 import {Request, Response} from 'express'
 import {prodDB, testDB} from '../db'
 
-import SimpleTextOperation = require('../simpleTextOT');
-
-const Insert = SimpleTextOperation.Insert;
-const Delete = SimpleTextOperation.Delete;
+import ServerConstructor = require('../serverOtOperations');
+import hydrateOperations = require('../serverOtOperations');
 
 export default async (req: Request, res: Response) => {
   // const payload: Conversation = req.body  // [TODO][optional] create the Conversation interface
   const payload = req.body;
   let db = undefined;
+  let server = undefined;
 
   // choose db based on environment
   process.env.NODE_ENV === 'development' ? db = testDB : db = prodDB
@@ -19,20 +18,37 @@ export default async (req: Request, res: Response) => {
     let val: any = undefined;
     let msg = "";
     let text = payload.data.text;
+    let operations: JSON[] = [
+      JSON.parse({
+      type: payload.data.type,
+      text: payload.data.text,
+      index: payload.data.index,
+      length: payload.data.length
+    }.toString())];
 
     // conversation exists in db ? updates text : starts conversation
     ref.child('conversations').orderByChild("conversationId").equalTo(payload.conversationId).once("value", (snapshot: { exists: () => any; val: () => any; }) => {
       if (snapshot.exists()){
         // get text from conversation and update it
-        // if origin doesn't match return an error
         val = snapshot.val();
-        if (payload.data.type === "insert") text = new Insert(text, payload.data.index).apply(val.text);
-        if (payload.data.type === "delete") text = new Delete(payload.data.length, payload.data.index).apply(val.text);
+        // operations.push(val.operations);
+        operations = hydrateOperations(operations);
+
+        try {
+          server = ServerConstructor.new(val.text, operations); 
+          // [WIP] what is revision? track number of mutations? 
+          server.receiveOperation()
+        } catch (e) {
+          // operation revision not in history
+        }
       } else {
         // create conversation
+        // [potential][BUG] Assynchronous 'conversation' push to DB might not finish before pushing 'operations' child
         ref.child('conversations').push({'conversationId': payload.conversationId, 'text': text});
       }
-      ref.child('mutations').push(payload);
+
+      ref.child('conversations/' + payload.conversationId).child('operations').set(operations);
+
     }, (errorObject: { code: string; }) => {
       msg = errorObject.code;
     });
@@ -50,7 +66,7 @@ export default async (req: Request, res: Response) => {
 }
 
 
-// Expected Request
+// Expected Request (payload)
 /*
 {
   "author": "alice | bob",
@@ -74,4 +90,10 @@ export default async (req: Request, res: Response) => {
   conversationId: "string",
   text: "string"
 }
+*/
+
+// Example SimpleTextOperation Behavior
+/*
+test.strictEqual("Hallo Welt!", new Insert("Welt", 6).apply("Hallo !"));
+test.strictEqual("Hallo !", new Delete(4, 6).apply("Hallo Welt!"));
 */
